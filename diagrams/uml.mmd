@@ -1,15 +1,65 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
-
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +String name
+        +List~Pet~ pets
+        +dict preferences
+        +add_pet(pet)
+        +remove_pet(pet)
+        +get_pet(pet_name)
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +String name
+        +String species
+        +String breed
+        +int age
+        +String notes
+        +List~Task~ tasks
+        +add_task(task)
+        +edit_task(task_id, updates)
+        +remove_task(task_id)
+        +get_tasks()
+        +get_tasks_by_category(category)
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +String id
+        +String name
+        +String category
+        +int duration
+        +String priority
+        +String preferred_time_window
+        +String frequency
+        +bool is_time_sensitive
+        +conflicts_with(other_task)
+        +to_dict()
+        +from_dict(data)
+    }
+
+    class Scheduler {
+        +int available_time
+        +List~Task~ tasks
+        +String strategy
+        +generate_plan(pet, available_time)
+        +_select_tasks(tasks, available_time)
+        +_order_tasks(selected_tasks)
+        +explain_decision(task, included)
+    }
+
+    class DailyPlan {
+        +Pet pet
+        +date date
+        +List~Task~ scheduled_tasks
+        +List~Task~ dropped_tasks
+        +int total_time_used
+        +int time_remaining
+        +summary()
+        +explain()
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : has
+    Scheduler --> Pet : evaluates
+    Scheduler --> DailyPlan : creates
+    DailyPlan --> Pet : for
+    DailyPlan --> Task : includes
