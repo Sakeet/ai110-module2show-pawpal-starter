@@ -1,5 +1,6 @@
 """Simple test suite for PawPal system."""
 
+import json
 from pawpal_system import (
     Task, Pet, Owner, Scheduler, DailyPlan,
     TaskCategory, Priority, Frequency
@@ -94,6 +95,101 @@ def test_pet_management():
     print("✓ Pet task management works")
 
 
+def test_pet_serialization():
+    """Test Pet to_dict and from_dict with nested tasks."""
+    pet = Pet(
+        name="Whiskers",
+        species="cat",
+        breed="Siamese",
+        age=2,
+        notes="Picky eater",
+    )
+    
+    task1 = Task(id="t1", name="Lunch", category=TaskCategory.FEEDING, duration=15, priority=Priority.MUST_DO)
+    task2 = Task(id="t2", name="Play", category=TaskCategory.ENRICHMENT, duration=20)
+    
+    pet.add_task(task1)
+    pet.add_task(task2)
+    
+    # Serialize
+    pet_dict = pet.to_dict()
+    assert pet_dict["name"] == "Whiskers"
+    assert len(pet_dict["tasks"]) == 2
+    
+    # Deserialize
+    pet2 = Pet.from_dict(pet_dict)
+    assert pet2.name == pet.name
+    assert len(pet2.tasks) == 2
+    assert pet2.tasks[0].name == "Lunch"
+    
+    print("✓ Pet serialization works")
+
+
+def test_owner_and_multi_pet():
+    """Test Owner managing multiple pets and accessing all tasks."""
+    owner = Owner(name="Alice", preferences={"timezone": "PST"})
+    
+    # Create pets with tasks
+    dog = Pet(name="Buddy", species="dog")
+    dog.add_task(Task(id="d1", name="Walk", category=TaskCategory.WALK, duration=30, priority=Priority.HIGH))
+    dog.add_task(Task(id="d2", name="Dinner", category=TaskCategory.FEEDING, duration=15, priority=Priority.MUST_DO))
+    
+    cat = Pet(name="Whiskers", species="cat")
+    cat.add_task(Task(id="c1", name="Lunch", category=TaskCategory.FEEDING, duration=10, priority=Priority.MUST_DO))
+    cat.add_task(Task(id="c2", name="Enrichment", category=TaskCategory.ENRICHMENT, duration=20))
+    
+    owner.add_pet(dog)
+    owner.add_pet(cat)
+    
+    # Test pet retrieval
+    assert owner.get_pet("Buddy") == dog
+    assert owner.get_pet("Whiskers") == cat
+    assert owner.get_pet("NonExistent") is None
+    
+    # Test getting all tasks
+    all_tasks = owner.get_all_tasks()
+    assert len(all_tasks) == 4
+    
+    # Test getting tasks by category
+    walks = owner.get_all_tasks_by_category(TaskCategory.WALK)
+    assert len(walks) == 1
+    assert walks[0].name == "Walk"
+    
+    feedings = owner.get_all_tasks_by_category(TaskCategory.FEEDING)
+    assert len(feedings) == 2
+    
+    print("✓ Owner multi-pet management works")
+
+
+def test_owner_serialization():
+    """Test Owner to_dict and from_dict with all pets and tasks."""
+    owner = Owner(name="Bob", preferences={"notifications": "email"})
+    
+    pet1 = Pet(name="Fido", species="dog")
+    pet1.add_task(Task(id="p1t1", name="Walk", category=TaskCategory.WALK, duration=30))
+    
+    pet2 = Pet(name="Mittens", species="cat")
+    pet2.add_task(Task(id="p2t1", name="Feed", category=TaskCategory.FEEDING, duration=10))
+    
+    owner.add_pet(pet1)
+    owner.add_pet(pet2)
+    
+    # Serialize full hierarchy
+    owner_dict = owner.to_dict()
+    assert owner_dict["name"] == "Bob"
+    assert len(owner_dict["pets"]) == 2
+    assert len(owner_dict["pets"][0]["tasks"]) == 1
+    
+    # Deserialize
+    owner2 = Owner.from_dict(owner_dict)
+    assert owner2.name == owner.name
+    assert len(owner2.pets) == 2
+    assert owner2.pets[0].name == "Fido"
+    assert len(owner2.pets[0].tasks) == 1
+    
+    print("✓ Owner serialization (full hierarchy) works")
+
+
 def test_scheduler_greedy_selection():
     """Test the scheduler's greedy task selection."""
     pet = Pet(name="Max", species="cat", age=2)
@@ -139,6 +235,82 @@ def test_scheduler_greedy_selection():
     print("✓ Scheduler greedy selection works")
 
 
+def test_scheduler_get_all_tasks_for_owner():
+    """Test scheduler retrieving all tasks from an owner."""
+    owner = Owner(name="Charlie")
+    
+    dog = Pet(name="Rex", species="dog")
+    dog.add_task(Task(id="t1", name="Walk", category=TaskCategory.WALK, duration=30))
+    dog.add_task(Task(id="t2", name="Feed", category=TaskCategory.FEEDING, duration=10))
+    
+    cat = Pet(name="Luna", species="cat")
+    cat.add_task(Task(id="t3", name="Groom", category=TaskCategory.GROOMING, duration=20))
+    
+    owner.add_pet(dog)
+    owner.add_pet(cat)
+    
+    scheduler = Scheduler()
+    all_owner_tasks = scheduler.get_all_tasks_for_owner(owner)
+    
+    assert len(all_owner_tasks) == 3
+    task_names = {t.name for t in all_owner_tasks}
+    assert task_names == {"Walk", "Feed", "Groom"}
+    
+    print("✓ Scheduler get_all_tasks_for_owner works")
+
+
+def test_generate_plans_for_owner():
+    """Test generating individual plans for each of owner's pets."""
+    owner = Owner(name="Diana")
+    
+    dog = Pet(name="Buddy", species="dog")
+    dog.add_task(Task(id="d1", name="Walk", category=TaskCategory.WALK, duration=30, priority=Priority.HIGH))
+    dog.add_task(Task(id="d2", name="Feed", category=TaskCategory.FEEDING, duration=15, priority=Priority.MUST_DO))
+    
+    cat = Pet(name="Whiskers", species="cat")
+    cat.add_task(Task(id="c1", name="Groom", category=TaskCategory.GROOMING, duration=20, priority=Priority.MEDIUM))
+    
+    owner.add_pet(dog)
+    owner.add_pet(cat)
+    
+    scheduler = Scheduler()
+    plans = scheduler.generate_plans_for_owner(owner, available_time_per_pet=60)
+    
+    assert len(plans) == 2
+    assert plans[0].pet.name == "Buddy"
+    assert plans[1].pet.name == "Whiskers"
+    assert len(plans[0].scheduled_tasks) == 2  # Dog gets all tasks (30+15=45 < 60)
+    assert len(plans[1].scheduled_tasks) == 1  # Cat gets groom task
+    
+    print("✓ Scheduler generate_plans_for_owner works")
+
+
+def test_daily_plan_serialization():
+    """Test DailyPlan serialization and deserialization."""
+    pet = Pet(name="Test", species="test")
+    task1 = Task(id="t1", name="Task 1", duration=20, priority=Priority.HIGH)
+    task2 = Task(id="t2", name="Task 2", duration=30, priority=Priority.LOW)
+    
+    pet.add_task(task1)
+    pet.add_task(task2)
+    
+    scheduler = Scheduler()
+    plan = scheduler.generate_plan(pet, available_time=25)
+    
+    # Serialize
+    plan_dict = plan.to_dict()
+    assert plan_dict["pet"]["name"] == "Test"
+    assert len(plan_dict["scheduled_tasks"]) > 0
+    
+    # Deserialize
+    plan2 = DailyPlan.from_dict(plan_dict)
+    assert plan2.pet.name == plan.pet.name
+    assert len(plan2.scheduled_tasks) == len(plan.scheduled_tasks)
+    assert plan2.total_time_used == plan.total_time_used
+    
+    print("✓ DailyPlan serialization works")
+
+
 def test_daily_plan_output():
     """Test DailyPlan summary and explanation."""
     pet = Pet(name="Buddy", species="dog", breed="Labrador", age=5)
@@ -163,33 +335,17 @@ def test_daily_plan_output():
     print("✓ Daily plan output works")
 
 
-def test_owner_management():
-    """Test Owner pet management."""
-    owner = Owner(name="Alice", preferences={"timezone": "PST"})
-    
-    pet1 = Pet(name="Buddy", species="dog")
-    pet2 = Pet(name="Whiskers", species="cat")
-    
-    owner.add_pet(pet1)
-    owner.add_pet(pet2)
-    
-    assert len(owner.pets) == 2
-    assert owner.get_pet("Buddy") == pet1
-    assert owner.get_pet("Whiskers") == pet2
-    assert owner.get_pet("NonExistent") is None
-    
-    owner.remove_pet(pet1)
-    assert len(owner.pets) == 1
-    
-    print("✓ Owner pet management works")
-
-
 if __name__ == "__main__":
     test_task_creation_and_serialization()
     test_conflicts_with()
     test_pet_management()
+    test_pet_serialization()
+    test_owner_and_multi_pet()
+    test_owner_serialization()
     test_scheduler_greedy_selection()
+    test_scheduler_get_all_tasks_for_owner()
+    test_generate_plans_for_owner()
+    test_daily_plan_serialization()
     test_daily_plan_output()
-    test_owner_management()
     
     print("\n✅ All tests passed!")

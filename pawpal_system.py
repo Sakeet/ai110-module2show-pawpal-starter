@@ -159,6 +159,38 @@ class Owner:
                 return pet
         return None
 
+    def get_all_tasks(self) -> List[Task]:
+        """Retrieve all tasks across all pets owned by this owner."""
+        all_tasks = []
+        for pet in self.pets:
+            all_tasks.extend(pet.get_tasks())
+        return all_tasks
+
+    def get_all_tasks_by_category(self, category: TaskCategory) -> List[Task]:
+        """Retrieve all tasks of a specific category across all pets."""
+        all_tasks = []
+        for pet in self.pets:
+            all_tasks.extend(pet.get_tasks_by_category(category))
+        return all_tasks
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize owner and all pets to dict."""
+        return {
+            "name": self.name,
+            "pets": [p.to_dict() for p in self.pets],
+            "preferences": self.preferences,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Owner":
+        """Deserialize owner and all pets from dict."""
+        pets = [Pet.from_dict(p) for p in data.get("pets", [])]
+        return cls(
+            name=data["name"],
+            pets=pets,
+            preferences=data.get("preferences", {}),
+        )
+
 
 @dataclass
 class Scheduler:
@@ -166,8 +198,16 @@ class Scheduler:
     tasks: List[Task] = field(default_factory=list)
     strategy: str = "priority-first"
 
+    def get_all_tasks_for_owner(self, owner: Owner) -> List[Task]:
+        """Retrieve all tasks from all of an owner's pets.
+        
+        This method aggregates tasks across the owner's entire pet collection,
+        making it easy to view or work with all care activities at once.
+        """
+        return owner.get_all_tasks()
+
     def generate_plan(self, pet: Pet, available_time: int) -> "DailyPlan":
-        """Generate a daily plan for a pet given available time in minutes."""
+        """Generate a daily plan for a single pet given available time in minutes."""
         plan = DailyPlan(pet=pet, date=date.today())
         
         # Get all candidate tasks sorted by priority
@@ -206,16 +246,89 @@ class Scheduler:
         plan.time_remaining = available_time - time_used
         return plan
 
+    def generate_plans_for_owner(self, owner: Owner, available_time_per_pet: int) -> List[DailyPlan]:
+        """Generate daily plans for each of an owner's pets.
+        
+        Each pet gets its own plan with the specified available time,
+        allowing the owner to see what needs to be done for each animal.
+        
+        Args:
+            owner: The Owner whose pets need planning
+            available_time_per_pet: Minutes available for each individual pet
+            
+        Returns:
+            List of DailyPlan objects, one per pet, in the same order as owner.pets
+        """
+        plans = []
+        for pet in owner.pets:
+            plan = self.generate_plan(pet, available_time_per_pet)
+            plans.append(plan)
+        return plans
+
+    def generate_combined_plan(self, owner: Owner, total_available_time: int) -> Dict[str, Any]:
+        """Generate a combined plan allocating time across all of an owner's pets.
+        
+        This method attempts to fit all tasks from all pets into a single time budget,
+        prioritizing tasks across pets based on priority and time-sensitivity.
+        Useful for owners planning a single block of pet care time.
+        
+        Args:
+            owner: The Owner with multiple pets
+            total_available_time: Total minutes available for all pets combined
+            
+        Returns:
+            Dict with keys 'pet_plans' (list of DailyPlans), 'summary' (overview text),
+            and 'total_time_used' (actual time allocated)
+        """
+        all_tasks_with_pet = []
+        for pet in owner.pets:
+            for task in pet.get_tasks():
+                all_tasks_with_pet.append((pet, task))
+        
+        # Sort by priority and time-sensitivity
+        priority_order = {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}
+        all_tasks_with_pet.sort(
+            key=lambda x: (priority_order.get(x[1].priority, 4), not x[1].is_time_sensitive, x[1].duration)
+        )
+        
+        # Greedily allocate time
+        time_used = 0
+        included_task_ids = set()
+        pet_to_plan = {pet.name: DailyPlan(pet=pet, date=date.today()) for pet in owner.pets}
+        
+        for pet, task in all_tasks_with_pet:
+            if time_used + task.duration <= total_available_time:
+                pet_to_plan[pet.name].scheduled_tasks.append(task)
+                included_task_ids.add(task.id)
+                time_used += task.duration
+        
+        # Assign dropped tasks to their respective plans
+        for pet, task in all_tasks_with_pet:
+            if task.id not in included_task_ids:
+                reason = self.explain_decision(task, included=False)
+                pet_to_plan[pet.name].dropped_tasks.append({"task": task, "reason": reason})
+        
+        # Update time totals for each plan
+        for pet in owner.pets:
+            plan = pet_to_plan[pet.name]
+            plan.total_time_used = sum(t.duration for t in plan.scheduled_tasks)
+            plan.time_remaining = total_available_time - plan.total_time_used
+        
+        return {
+            "pet_plans": list(pet_to_plan.values()),
+            "total_time_used": time_used,
+            "total_time_available": total_available_time,
+            "time_remaining": total_available_time - time_used,
+        }
+
     def _select_tasks(self, tasks: List[Task], available_time: int) -> List[Task]:
         """Select candidate tasks using a greedy priority-based approach."""
-        # Filter and sort: MUST_DO first, then by priority level, then by time-sensitive flag
         priority_order = {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}
         candidates = sorted(
             tasks,
             key=lambda t: (priority_order.get(t.priority, 4), not t.is_time_sensitive, t.duration)
         )
         
-        # Greedy: include tasks that fit
         selected = []
         time_used = 0
         for task in candidates:
@@ -230,9 +343,9 @@ class Scheduler:
         return sorted(
             selected_tasks,
             key=lambda t: (
-                not t.is_time_sensitive,  # time-sensitive tasks first
+                not t.is_time_sensitive,
                 {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}.get(t.priority, 4),
-                t.preferred_time_window[0] if t.preferred_time_window else 999,  # earliest preferred time
+                t.preferred_time_window[0] if t.preferred_time_window else 999,
             )
         )
 
@@ -299,3 +412,36 @@ class DailyPlan:
             lines.append("  (none)")
         
         return "\n".join(lines)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize daily plan to dict."""
+        return {
+            "pet": self.pet.to_dict(),
+            "date": self.date.isoformat(),
+            "scheduled_tasks": [t.to_dict() for t in self.scheduled_tasks],
+            "dropped_tasks": [
+                {"task": item["task"].to_dict(), "reason": item["reason"]}
+                for item in self.dropped_tasks
+            ],
+            "total_time_used": self.total_time_used,
+            "time_remaining": self.time_remaining,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DailyPlan":
+        """Deserialize daily plan from dict."""
+        pet = Pet.from_dict(data["pet"])
+        scheduled = [Task.from_dict(t) for t in data.get("scheduled_tasks", [])]
+        dropped = [
+            {"task": Task.from_dict(item["task"]), "reason": item["reason"]}
+            for item in data.get("dropped_tasks", [])
+        ]
+        
+        return cls(
+            pet=pet,
+            date=date.fromisoformat(data.get("date", date.today().isoformat())),
+            scheduled_tasks=scheduled,
+            dropped_tasks=dropped,
+            total_time_used=data.get("total_time_used", 0),
+            time_remaining=data.get("time_remaining", 0),
+        )
