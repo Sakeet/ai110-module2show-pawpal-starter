@@ -57,8 +57,6 @@ Yes, the design evolved significantly during implementation. Here are the key ch
 **Impact:**
 These changes transformed the skeleton from a collection of empty stubs into a working, tested system with clear data flow. The result is more robust (enums, structured times), more transparent (reasons for dropped tasks), and more complete (serialization, working scheduler). The design is now ready for UI integration and handles the happy path reliably.
 
----
-
 ## 2. Scheduling Logic and Tradeoffs
 
 **a. Constraints and priorities**
@@ -68,8 +66,8 @@ These changes transformed the skeleton from a collection of empty stubs into a w
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+- One tradeoff my scheduler makes is that it checks for exact time-window overlap when detecting conflicts, rather than modeling every task's full duration across the day.
+- This is reasonable for this project because the scheduler is meant to be lightweight and easy to understand for a pet-care app. Exact overlap checks are fast, simple to explain, and good enough to spot obvious scheduling conflicts without making the logic too complex.
 
 ---
 

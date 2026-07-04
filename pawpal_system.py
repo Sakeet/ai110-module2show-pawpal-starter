@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -38,9 +38,12 @@ class Task:
     preferred_time_window: Optional[Tuple[int, int]] = None  # (start_minute, end_minute) from midnight
     frequency: Frequency = Frequency.DAILY
     is_time_sensitive: bool = False
+    status: str = "pending"
+    pet_name: Optional[str] = None
+    due_date: Optional[date] = None
 
     def conflicts_with(self, other_task: "Task") -> bool:
-        """Check if this task's time window overlaps with another task's."""
+        """Return True if two tasks overlap in time."""
         if not self.preferred_time_window or not other_task.preferred_time_window:
             return False
         
@@ -50,8 +53,35 @@ class Task:
         # Overlap if one doesn't end before the other starts
         return not (self_end <= other_start or other_end <= self_start)
 
+    def mark_complete(self) -> Optional["Task"]:
+        """Mark the task as completed and create the next occurrence for recurring tasks."""
+        self.status = "completed"
+
+        if self.frequency == Frequency.DAILY:
+            return self._create_next_occurrence(days=1)
+        if self.frequency == Frequency.WEEKLY:
+            return self._create_next_occurrence(days=7)
+        return None
+
+    def _create_next_occurrence(self, days: int) -> "Task":
+        """Create a new pending task for the next occurrence."""
+        next_occurrence = Task(
+            id=f"{self.id}-next",
+            name=self.name,
+            category=self.category,
+            duration=self.duration,
+            priority=self.priority,
+            preferred_time_window=self.preferred_time_window,
+            frequency=self.frequency,
+            is_time_sensitive=self.is_time_sensitive,
+            status="pending",
+            pet_name=self.pet_name,
+            due_date=(self.due_date or date.today()) + timedelta(days=days),
+        )
+        return next_occurrence
+
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize task to dict."""
+        """Convert the task to a dictionary."""
         return {
             "id": self.id,
             "name": self.name,
@@ -61,11 +91,14 @@ class Task:
             "preferred_time_window": self.preferred_time_window,
             "frequency": self.frequency.value,
             "is_time_sensitive": self.is_time_sensitive,
+            "status": self.status,
+            "pet_name": self.pet_name,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Task":
-        """Deserialize task from dict."""
+        """Create a task from a dictionary."""
         return cls(
             id=data["id"],
             name=data["name"],
@@ -75,6 +108,9 @@ class Task:
             preferred_time_window=data.get("preferred_time_window"),
             frequency=Frequency(data.get("frequency", "daily")),
             is_time_sensitive=data.get("is_time_sensitive", False),
+            status=data.get("status", "pending"),
+            pet_name=data.get("pet_name"),
+            due_date=date.fromisoformat(data["due_date"]) if data.get("due_date") else None,
         )
 
 
@@ -88,11 +124,12 @@ class Pet:
     tasks: List[Task] = field(default_factory=list)
 
     def add_task(self, task: Task) -> None:
-        """Add a task to this pet's task list."""
+        """Add a task to this pet."""
+        task.pet_name = self.name
         self.tasks.append(task)
 
     def edit_task(self, task_id: str, **updates: Any) -> None:
-        """Edit a task by id with keyword arguments."""
+        """Update a task by ID using keyword values."""
         for task in self.tasks:
             if task.id == task_id:
                 for key, value in updates.items():
@@ -102,7 +139,7 @@ class Pet:
         raise ValueError(f"Task {task_id} not found")
 
     def remove_task(self, task_id: str) -> None:
-        """Remove a task by id."""
+        """Remove the task with the given ID."""
         self.tasks = [t for t in self.tasks if t.id != task_id]
 
     def get_tasks(self) -> List[Task]:
@@ -110,11 +147,11 @@ class Pet:
         return self.tasks
 
     def get_tasks_by_category(self, category: TaskCategory) -> List[Task]:
-        """Return tasks filtered by category."""
+        """Return tasks matching the given category."""
         return [t for t in self.tasks if t.category == category]
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize pet to dict."""
+        """Convert the pet to a dictionary."""
         return {
             "name": self.name,
             "species": self.species,
@@ -126,7 +163,7 @@ class Pet:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Pet":
-        """Deserialize pet from dict."""
+        """Create a pet from a dictionary."""
         tasks = [Task.from_dict(t) for t in data.get("tasks", [])]
         return cls(
             name=data["name"],
@@ -145,36 +182,36 @@ class Owner:
     preferences: Dict[str, Any] = field(default_factory=dict)
 
     def add_pet(self, pet: Pet) -> None:
-        """Add a pet to this owner's pet list."""
+        """Add a pet to this owner."""
         self.pets.append(pet)
 
     def remove_pet(self, pet: Pet) -> None:
-        """Remove a pet from this owner's pet list."""
+        """Remove a pet from this owner."""
         self.pets = [p for p in self.pets if p.name != pet.name]
 
     def get_pet(self, pet_name: str) -> Optional[Pet]:
-        """Retrieve a pet by name."""
+        """Return the pet with the given name."""
         for pet in self.pets:
             if pet.name == pet_name:
                 return pet
         return None
 
     def get_all_tasks(self) -> List[Task]:
-        """Retrieve all tasks across all pets owned by this owner."""
+        """Return all tasks across this owner's pets."""
         all_tasks = []
         for pet in self.pets:
             all_tasks.extend(pet.get_tasks())
         return all_tasks
 
     def get_all_tasks_by_category(self, category: TaskCategory) -> List[Task]:
-        """Retrieve all tasks of a specific category across all pets."""
+        """Return tasks of the given category across this owner's pets."""
         all_tasks = []
         for pet in self.pets:
             all_tasks.extend(pet.get_tasks_by_category(category))
         return all_tasks
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize owner and all pets to dict."""
+        """Convert the owner to a dictionary."""
         return {
             "name": self.name,
             "pets": [p.to_dict() for p in self.pets],
@@ -183,7 +220,7 @@ class Owner:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Owner":
-        """Deserialize owner and all pets from dict."""
+        """Create an owner from a dictionary."""
         pets = [Pet.from_dict(p) for p in data.get("pets", [])]
         return cls(
             name=data["name"],
@@ -198,24 +235,67 @@ class Scheduler:
     tasks: List[Task] = field(default_factory=list)
     strategy: str = "priority-first"
 
+    def sort_by_time(self, tasks: List[Task]) -> List[Task]:
+        """Return tasks ordered by their preferred start time, then by name as a fallback."""
+        return sorted(
+            tasks,
+            key=lambda task: (
+                task.preferred_time_window[0] if task.preferred_time_window else 9999,
+                task.preferred_time_window[1] if task.preferred_time_window else 9999,
+                task.name,
+            ),
+        )
+
+    def filter_tasks(self, tasks: List[Task], status: Optional[str] = None, pet_name: Optional[str] = None) -> List[Task]:
+        """Return tasks that match the requested completion status and/or pet name."""
+        filtered_tasks: List[Task] = []
+        for task in tasks:
+            if status is not None and task.status != status:
+                continue
+            if pet_name is not None and not self._task_belongs_to_pet(task, pet_name):
+                continue
+            filtered_tasks.append(task)
+        return filtered_tasks
+
+    def detect_conflicts(self, tasks: List[Task]) -> List[str]:
+        """Return warning messages when two tasks overlap in the same time window."""
+        warnings: List[str] = []
+        for index, task in enumerate(tasks):
+            if not task.preferred_time_window:
+                continue
+            for other in tasks[index + 1 :]:
+                if not other.preferred_time_window:
+                    continue
+                if task.conflicts_with(other):
+                    pet_names = ", ".join(filter(None, [task.pet_name, other.pet_name])) or "unknown"
+                    warnings.append(
+                        f"Warning: '{task.name}' and '{other.name}' overlap for {pet_names} at the same time."
+                    )
+        return warnings
+
+    def _task_belongs_to_pet(self, task: Task, pet_name: str) -> bool:
+        """Return True when the task is associated with the named pet."""
+        return task.pet_name == pet_name
+
     def get_all_tasks_for_owner(self, owner: Owner) -> List[Task]:
-        """Retrieve all tasks from all of an owner's pets.
-        
-        This method aggregates tasks across the owner's entire pet collection,
-        making it easy to view or work with all care activities at once.
-        """
+        """Return all tasks from an owner's pets."""
         return owner.get_all_tasks()
 
     def generate_plan(self, pet: Pet, available_time: int) -> "DailyPlan":
-        """Generate a daily plan for a single pet given available time in minutes."""
+        """Create a daily plan for one pet within the available time."""
         plan = DailyPlan(pet=pet, date=date.today())
         
-        # Get all candidate tasks sorted by priority
+        # Get all candidate tasks sorted by time first, then priority
         all_tasks = pet.get_tasks()
         priority_order = {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}
         sorted_tasks = sorted(
             all_tasks,
-            key=lambda t: (priority_order.get(t.priority, 4), not t.is_time_sensitive, t.duration)
+            key=lambda t: (
+                t.preferred_time_window[0] if t.preferred_time_window else 9999,
+                priority_order.get(t.priority, 4),
+                not t.is_time_sensitive,
+                t.duration,
+            ),
         )
         
         # Greedily fit tasks into available time
@@ -230,9 +310,10 @@ class Scheduler:
         # Order scheduled tasks
         plan.scheduled_tasks.sort(
             key=lambda t: (
+                t.preferred_time_window[0] if t.preferred_time_window else 9999,
                 not t.is_time_sensitive,
                 priority_order.get(t.priority, 4),
-                t.preferred_time_window[0] if t.preferred_time_window else 999,
+                t.preferred_time_window[1] if t.preferred_time_window else 9999,
             )
         )
         
@@ -247,18 +328,7 @@ class Scheduler:
         return plan
 
     def generate_plans_for_owner(self, owner: Owner, available_time_per_pet: int) -> List[DailyPlan]:
-        """Generate daily plans for each of an owner's pets.
-        
-        Each pet gets its own plan with the specified available time,
-        allowing the owner to see what needs to be done for each animal.
-        
-        Args:
-            owner: The Owner whose pets need planning
-            available_time_per_pet: Minutes available for each individual pet
-            
-        Returns:
-            List of DailyPlan objects, one per pet, in the same order as owner.pets
-        """
+        """Create a daily plan for each pet owned by the user."""
         plans = []
         for pet in owner.pets:
             plan = self.generate_plan(pet, available_time_per_pet)
@@ -266,20 +336,7 @@ class Scheduler:
         return plans
 
     def generate_combined_plan(self, owner: Owner, total_available_time: int) -> Dict[str, Any]:
-        """Generate a combined plan allocating time across all of an owner's pets.
-        
-        This method attempts to fit all tasks from all pets into a single time budget,
-        prioritizing tasks across pets based on priority and time-sensitivity.
-        Useful for owners planning a single block of pet care time.
-        
-        Args:
-            owner: The Owner with multiple pets
-            total_available_time: Total minutes available for all pets combined
-            
-        Returns:
-            Dict with keys 'pet_plans' (list of DailyPlans), 'summary' (overview text),
-            and 'total_time_used' (actual time allocated)
-        """
+        """Create a combined plan for all pets within a shared time limit."""
         all_tasks_with_pet = []
         for pet in owner.pets:
             for task in pet.get_tasks():
@@ -322,7 +379,7 @@ class Scheduler:
         }
 
     def _select_tasks(self, tasks: List[Task], available_time: int) -> List[Task]:
-        """Select candidate tasks using a greedy priority-based approach."""
+        """Select tasks greedily by priority and urgency."""
         priority_order = {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}
         candidates = sorted(
             tasks,
@@ -339,7 +396,7 @@ class Scheduler:
         return selected
 
     def _order_tasks(self, selected_tasks: List[Task]) -> List[Task]:
-        """Order tasks: time-sensitive first, then by priority, then by start time."""
+        """Order selected tasks by urgency and time window."""
         return sorted(
             selected_tasks,
             key=lambda t: (
@@ -350,7 +407,7 @@ class Scheduler:
         )
 
     def explain_decision(self, task: Task, included: bool) -> str:
-        """Generate a human-readable explanation for including or excluding a task."""
+        """Explain why a task was included or dropped."""
         if included:
             return f"Included '{task.name}' (priority: {task.priority.value}, duration: {task.duration}min)"
         else:
@@ -367,7 +424,7 @@ class DailyPlan:
     time_remaining: int = 0
 
     def summary(self) -> str:
-        """Return a human-readable summary of the plan."""
+        """Return a readable summary of the plan."""
         lines = [
             f"Daily Plan for {self.pet.name} ({self.date})",
             f"Available time: {self.total_time_used + self.time_remaining} minutes",
@@ -391,7 +448,7 @@ class DailyPlan:
         return "\n".join(lines)
 
     def explain(self) -> str:
-        """Return detailed reasoning for all decisions."""
+        """Return a short explanation of the plan decisions."""
         lines = [f"Explanation for {self.pet.name}'s plan ({self.date}):", ""]
         
         lines.append("Included tasks:")
@@ -414,7 +471,7 @@ class DailyPlan:
         return "\n".join(lines)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize daily plan to dict."""
+        """Convert the daily plan to a dictionary."""
         return {
             "pet": self.pet.to_dict(),
             "date": self.date.isoformat(),
@@ -429,7 +486,7 @@ class DailyPlan:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DailyPlan":
-        """Deserialize daily plan from dict."""
+        """Create a daily plan from a dictionary."""
         pet = Pet.from_dict(data["pet"])
         scheduled = [Task.from_dict(t) for t in data.get("scheduled_tasks", [])]
         dropped = [

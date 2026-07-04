@@ -1,6 +1,12 @@
-"""Simple test suite for PawPal system."""
+"""Restored tests from the project root file (moved into tests/).
+
+This file was previously at the repository root and caused a pytest
+import collision with tests/test_pawpal.py. It was moved to avoid the
+issue.
+"""
 
 import json
+from datetime import date, timedelta
 from pawpal_system import (
     Task, Pet, Owner, Scheduler, DailyPlan,
     TaskCategory, Priority, Frequency
@@ -31,7 +37,6 @@ def test_task_creation_and_serialization():
     assert task2.name == task.name
     assert task2.priority == task.priority
     assert task2.preferred_time_window == task.preferred_time_window
-    print("✓ Task creation and serialization works")
 
 
 def test_conflicts_with():
@@ -59,7 +64,6 @@ def test_conflicts_with():
     
     assert task1.conflicts_with(task2), "Should detect overlap"
     assert not task1.conflicts_with(task3), "Should not detect overlap"
-    print("✓ Conflict detection works")
 
 
 def test_pet_management():
@@ -91,8 +95,6 @@ def test_pet_management():
     # Remove task
     pet.remove_task("f1")
     assert len(pet.tasks) == 1
-    
-    print("✓ Pet task management works")
 
 
 def test_pet_serialization():
@@ -121,8 +123,6 @@ def test_pet_serialization():
     assert pet2.name == pet.name
     assert len(pet2.tasks) == 2
     assert pet2.tasks[0].name == "Lunch"
-    
-    print("✓ Pet serialization works")
 
 
 def test_owner_and_multi_pet():
@@ -157,8 +157,6 @@ def test_owner_and_multi_pet():
     
     feedings = owner.get_all_tasks_by_category(TaskCategory.FEEDING)
     assert len(feedings) == 2
-    
-    print("✓ Owner multi-pet management works")
 
 
 def test_owner_serialization():
@@ -186,8 +184,6 @@ def test_owner_serialization():
     assert len(owner2.pets) == 2
     assert owner2.pets[0].name == "Fido"
     assert len(owner2.pets[0].tasks) == 1
-    
-    print("✓ Owner serialization (full hierarchy) works")
 
 
 def test_scheduler_greedy_selection():
@@ -231,8 +227,80 @@ def test_scheduler_greedy_selection():
     assert plan.scheduled_tasks[0].id == "m1"
     assert plan.scheduled_tasks[1].id == "h1"
     assert plan.scheduled_tasks[2].id == "m2"
-    
-    print("✓ Scheduler greedy selection works")
+
+
+def test_scheduler_sort_by_time():
+    """Test sorting tasks by their preferred time window."""
+    scheduler = Scheduler()
+    tasks = [
+        Task(id="late", name="Late task", preferred_time_window=(900, 960)),
+        Task(id="early", name="Early task", preferred_time_window=(480, 540)),
+        Task(id="mid", name="Mid task", preferred_time_window=(720, 780)),
+    ]
+
+    sorted_tasks = scheduler.sort_by_time(tasks)
+
+    assert [task.id for task in sorted_tasks] == ["early", "mid", "late"]
+
+
+def test_mark_complete_creates_next_occurrence_for_recurring_tasks():
+    """Test that completed daily and weekly tasks create a new pending task for the next occurrence."""
+    daily_task = Task(id="daily-1", name="Feed", frequency=Frequency.DAILY, due_date=date.today())
+    weekly_task = Task(id="weekly-1", name="Groom", frequency=Frequency.WEEKLY, due_date=date.today())
+
+    next_daily = daily_task.mark_complete()
+    next_weekly = weekly_task.mark_complete()
+
+    assert daily_task.status == "completed"
+    assert weekly_task.status == "completed"
+    assert next_daily is not None
+    assert next_weekly is not None
+    assert next_daily.status == "pending"
+    assert next_weekly.status == "pending"
+    assert next_daily.due_date == date.today() + timedelta(days=1)
+    assert next_weekly.due_date == date.today() + timedelta(days=7)
+
+
+def test_scheduler_detect_conflicts_returns_warning_messages():
+    """Test conflict detection for overlapping tasks without crashing."""
+    scheduler = Scheduler()
+    buddy = Pet(name="Buddy", species="dog")
+    whiskers = Pet(name="Whiskers", species="cat")
+
+    overlap_a = Task(id="a", name="Morning Walk", preferred_time_window=(480, 540), status="pending")
+    overlap_b = Task(id="b", name="Vet Visit", preferred_time_window=(500, 560), status="pending")
+
+    buddy.add_task(overlap_a)
+    whiskers.add_task(overlap_b)
+
+    warnings = scheduler.detect_conflicts([overlap_a, overlap_b])
+
+    assert len(warnings) == 1
+    assert "Morning Walk" in warnings[0]
+    assert "Vet Visit" in warnings[0]
+
+
+def test_scheduler_filter_tasks():
+    """Test filtering tasks by completion status and pet name."""
+    scheduler = Scheduler()
+    buddy = Pet(name="Buddy", species="dog")
+    whiskers = Pet(name="Whiskers", species="cat")
+
+    pending_walk = Task(id="w1", name="Walk", status="pending")
+    completed_feed = Task(id="f1", name="Feed", status="completed")
+    pending_med = Task(id="m1", name="Medicine", status="pending")
+
+    buddy.add_task(pending_walk)
+    buddy.add_task(completed_feed)
+    whiskers.add_task(pending_med)
+
+    owner = Owner(name="Alex")
+    owner.add_pet(buddy)
+    owner.add_pet(whiskers)
+
+    filtered_tasks = scheduler.filter_tasks(owner.get_all_tasks(), status="pending", pet_name="Buddy")
+
+    assert [task.id for task in filtered_tasks] == ["w1"]
 
 
 def test_scheduler_get_all_tasks_for_owner():
@@ -255,8 +323,6 @@ def test_scheduler_get_all_tasks_for_owner():
     assert len(all_owner_tasks) == 3
     task_names = {t.name for t in all_owner_tasks}
     assert task_names == {"Walk", "Feed", "Groom"}
-    
-    print("✓ Scheduler get_all_tasks_for_owner works")
 
 
 def test_generate_plans_for_owner():
@@ -281,8 +347,6 @@ def test_generate_plans_for_owner():
     assert plans[1].pet.name == "Whiskers"
     assert len(plans[0].scheduled_tasks) == 2  # Dog gets all tasks (30+15=45 < 60)
     assert len(plans[1].scheduled_tasks) == 1  # Cat gets groom task
-    
-    print("✓ Scheduler generate_plans_for_owner works")
 
 
 def test_daily_plan_serialization():
@@ -307,8 +371,6 @@ def test_daily_plan_serialization():
     assert plan2.pet.name == plan.pet.name
     assert len(plan2.scheduled_tasks) == len(plan.scheduled_tasks)
     assert plan2.total_time_used == plan.total_time_used
-    
-    print("✓ DailyPlan serialization works")
 
 
 def test_daily_plan_output():
@@ -331,11 +393,10 @@ def test_daily_plan_output():
     explain = plan.explain()
     assert "Walk" in explain
     assert "Lunch" in explain
-    
-    print("✓ Daily plan output works")
 
 
 if __name__ == "__main__":
+    # Allows running this file directly for quick manual checks
     test_task_creation_and_serialization()
     test_conflicts_with()
     test_pet_management()
@@ -348,4 +409,4 @@ if __name__ == "__main__":
     test_daily_plan_serialization()
     test_daily_plan_output()
     
-    print("\n✅ All tests passed!")
+    print("\n✅ Restored tests ran successfully (manual run).")

@@ -44,14 +44,55 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+The CLI entry point in `main.py` prints a simple, readable plan for each pet. A sample run looks like this:
 
-```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+```text
+======================================================================
+                   🐾 PAWPAL+ - PET CARE SCHEDULER 🐾                   
+======================================================================
+
+👤 Owner: Sarah Mitchell
+   Timezone: EST
+   Availability: weekday evenings and weekends
+
+----------------------------------------------------------------------
+🐕 PET 1: Creating Buddy the Dog...
+   ✓ Added 5 tasks to Buddy
+
+----------------------------------------------------------------------
+🐱 PET 2: Creating Whiskers the Cat...
+   ✓ Added 5 tasks to Whiskers
+
+----------------------------------------------------------------------
+📅 Generating Today's Schedules...
+
+======================================================================
+                          📋 TODAY'S SCHEDULE                          
+======================================================================
+
+======================== BUDDY ========================
+Species: dog
+Time budget: 120 min
+Scheduled: 5 task(s) | Used: 110 min | Remaining: 10 min
+
+Scheduled tasks:
+  • Breakfast            | 15 min | MUST_DO | [08:00-08:15]
+  • Morning Walk         | 30 min | HIGH    | [08:00-08:30]
+  • Dinner               | 15 min | MUST_DO | [17:00-17:15]
+  • Afternoon Walk       | 30 min | HIGH    | [17:00-17:30]
+  • Training Session     | 20 min | MEDIUM  | [18:00-18:20]
+
+====================== WHISKERS ======================
+Species: cat
+Time budget: 90 min
+Scheduled: 5 task(s) | Used: 50 min | Remaining: 40 min
+
+Scheduled tasks:
+  • Breakfast            | 10 min | MUST_DO | [08:00-08:10]
+  • Medication           |  5 min | MUST_DO | [10:00-10:05]
+  • Dinner               | 10 min | MUST_DO | [17:00-17:10]
+  • Lunch                | 10 min | MEDIUM  | [13:00-13:10]
+  • Play & Enrichment    | 15 min | MEDIUM  | [15:00-15:15]
 ```
 
 ## 🧪 Testing PawPal+
@@ -72,14 +113,14 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+The scheduler now includes a few lightweight but practical improvements for pet care planning:
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Sorting behavior | `Scheduler.sort_by_time()` | Orders tasks by their preferred start time so the daily plan feels more natural and time-aware. |
+| Filtering behavior | `Scheduler.filter_tasks()` | Filters tasks by completion status and/or pet name, which helps owners focus on pending tasks for a specific pet. |
+| Conflict detection | `Scheduler.detect_conflicts()` | Checks for overlapping time windows and returns a warning message instead of crashing the app. |
+| Recurring task logic | `Task.mark_complete()` | When a daily or weekly task is completed, a new pending task is created for the next occurrence using `timedelta`. |
 
 ## 📸 Demo Walkthrough
 
