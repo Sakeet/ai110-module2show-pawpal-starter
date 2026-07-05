@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import Enum
+from pathlib import Path
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -41,6 +43,8 @@ class Task:
     status: str = "pending"
     pet_name: Optional[str] = None
     due_date: Optional[date] = None
+    scheduled_start: Optional[int] = None
+    scheduled_end: Optional[int] = None
 
     def conflicts_with(self, other_task: "Task") -> bool:
         """Return True if two tasks overlap in time."""
@@ -94,6 +98,8 @@ class Task:
             "status": self.status,
             "pet_name": self.pet_name,
             "due_date": self.due_date.isoformat() if self.due_date else None,
+            "scheduled_start": self.scheduled_start,
+            "scheduled_end": self.scheduled_end,
         }
 
     @classmethod
@@ -111,6 +117,8 @@ class Task:
             status=data.get("status", "pending"),
             pet_name=data.get("pet_name"),
             due_date=date.fromisoformat(data["due_date"]) if data.get("due_date") else None,
+            scheduled_start=data.get("scheduled_start"),
+            scheduled_end=data.get("scheduled_end"),
         )
 
 
@@ -217,6 +225,18 @@ class Owner:
             "pets": [p.to_dict() for p in self.pets],
             "preferences": self.preferences,
         }
+
+    def save_to_file(self, path: Path | str) -> None:
+        """Save the owner and all pets/tasks to a JSON file."""
+        path = Path(path)
+        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+
+    @classmethod
+    def load_from_file(cls, path: Path | str) -> "Owner":
+        """Load the owner and all pets/tasks from a JSON file."""
+        path = Path(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls.from_dict(data)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Owner":
@@ -334,6 +354,52 @@ class Scheduler:
             plan = self.generate_plan(pet, available_time_per_pet)
             plans.append(plan)
         return plans
+
+    def generate_time_blocked_plan(self, pet: Pet, available_time: int) -> "DailyPlan":
+        """Generate a plan that assigns tasks to non-overlapping preferred time slots."""
+        plan = DailyPlan(pet=pet, date=date.today())
+        priority_order = {Priority.MUST_DO: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3}
+        candidate_tasks = sorted(
+            pet.get_tasks(),
+            key=lambda t: (
+                t.preferred_time_window[0] if t.preferred_time_window else 9999,
+                priority_order.get(t.priority, 4),
+                not t.is_time_sensitive,
+                t.duration,
+            ),
+        )
+
+        scheduled: List[Task] = []
+        time_used = 0
+
+        for task in candidate_tasks:
+            if task.preferred_time_window is None:
+                continue
+
+            start_window, end_window = task.preferred_time_window
+            candidate_start = start_window
+            for existing in scheduled:
+                if existing.scheduled_start is None or existing.scheduled_end is None:
+                    continue
+                if not (candidate_start + task.duration <= existing.scheduled_start or candidate_start >= existing.scheduled_end):
+                    candidate_start = existing.scheduled_end
+
+            if candidate_start + task.duration <= end_window and time_used + task.duration <= available_time:
+                task.scheduled_start = candidate_start
+                task.scheduled_end = candidate_start + task.duration
+                plan.scheduled_tasks.append(task)
+                scheduled.append(task)
+                scheduled.sort(key=lambda t: t.scheduled_start)
+                time_used += task.duration
+
+        for task in pet.get_tasks():
+            if task not in plan.scheduled_tasks:
+                reason = self.explain_decision(task, included=False)
+                plan.dropped_tasks.append({"task": task, "reason": reason})
+
+        plan.total_time_used = time_used
+        plan.time_remaining = available_time - time_used
+        return plan
 
     def generate_combined_plan(self, owner: Owner, total_available_time: int) -> Dict[str, Any]:
         """Create a combined plan for all pets within a shared time limit."""

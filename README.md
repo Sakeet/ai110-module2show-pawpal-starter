@@ -113,8 +113,8 @@ The tests verify core scheduler behavior, including:
 
 Sample test output:
 
-```
-![alt text](image-1.png)
+```text
+25 passed in 0.11s
 ```
 
 ## Features
@@ -124,7 +124,35 @@ Sample test output:
 - Conflict warnings (`Scheduler.detect_conflicts()`): detects overlapping preferred time windows and surfaces readable warnings in the UI.
 - Daily recurrence handling (`Task.mark_complete()`): creates the next occurrence for `daily` and `weekly` tasks so recurring care stays on the schedule.
 - Task filtering (`Scheduler.filter_tasks()`): shows only pending tasks for the selected pet and hides completed items from the active todo view.
+- Time-blocked scheduling (`Scheduler.generate_time_blocked_plan()`): assigns tasks into non-overlapping preferred time slots when possible.
+- JSON persistence (`Owner.save_to_file()` / `Owner.load_from_file()`): saves the owner/pets/tasks structure to disk and reloads it between runs.
+  ```json
+  {
+    "name": "Sarah Mitchell",
+    "preferences": {
+      "timezone": "EST",
+      "notifications": "email"
+    },
+    "pets": [
+      {
+        "name": "Buddy",
+        "species": "dog",
+        "tasks": [
+          {"id": "buddy_t2", "name": "Breakfast", "category": "feeding", "duration": 15, "priority": "must_do"}
+        ]
+      }
+    ]
+  }
+  ```
 - Plan explanation (`DailyPlan.summary()` and `DailyPlan.explain()`): generates human-readable plan summaries and reasons for why tasks were included or dropped.
+- Enhanced CLI formatting: readable columns, emoji headings, and a clear owner/task summary.
+
+## Bonus / Advanced Features
+
+- **Persistence layer:** `main.py` saves owner, pets, and tasks to `data/pawpal_owner.json` and loads it back to verify persistence.
+- **Advanced scheduling:** the scheduler can use `generate_time_blocked_plan()` to place tasks into actual preferred windows without overlap.
+- **Professional CLI formatting:** the demo output uses structured headings, task tables, and summary blocks for readability.
+- **AI interaction documentation:** the project now includes an `ai_interactions.md` section documenting agent workflow and prompt comparison.
 
 ## Demo Walkthrough
 
@@ -170,7 +198,10 @@ Example output:
 👤 Owner: Sarah Mitchell
    Timezone: EST
    Availability: weekday evenings and weekends
+   Saved data: data/pawpal_owner.json
 
+----------------------------------------------------------------------
+```
 ----------------------------------------------------------------------
 🐕 PET 1: Creating Buddy the Dog...
    ✓ Added 5 tasks to Buddy

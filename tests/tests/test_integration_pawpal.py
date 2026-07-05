@@ -338,6 +338,41 @@ def test_generate_combined_plan_drops_tasks_per_pet():
     assert any(plan.pet.name == "Cat" and len(plan.dropped_tasks) == 1 for plan in combined["pet_plans"])
 
 
+def test_generate_time_blocked_plan_schedules_non_overlapping_tasks():
+    """Test that the time-blocked scheduler assigns tasks to non-overlapping windows."""
+    pet = Pet(name="Milo", species="dog")
+    pet.add_task(Task(id="t1", name="Breakfast", duration=15, priority=Priority.MUST_DO, preferred_time_window=(480, 540)))
+    pet.add_task(Task(id="t2", name="Walk", duration=30, priority=Priority.HIGH, preferred_time_window=(510, 570)))
+    pet.add_task(Task(id="t3", name="Groom", duration=15, priority=Priority.MEDIUM, preferred_time_window=(570, 600)))
+
+    scheduler = Scheduler()
+    plan = scheduler.generate_time_blocked_plan(pet, available_time=90)
+
+    assert len(plan.scheduled_tasks) == 3
+    assert plan.total_time_used == 60
+    assert plan.time_remaining == 30
+    assert plan.scheduled_tasks[0].scheduled_end <= plan.scheduled_tasks[1].scheduled_start
+    assert plan.scheduled_tasks[1].scheduled_end <= plan.scheduled_tasks[2].scheduled_start
+
+
+def test_owner_persistence_save_load(tmp_path):
+    """Test saving and loading owner data to JSON."""
+    owner = Owner(name="Jordan")
+    dog = Pet(name="Buddy", species="dog")
+    dog.add_task(Task(id="t1", name="Walk", category=TaskCategory.WALK, duration=30))
+    owner.add_pet(dog)
+
+    file_path = tmp_path / "owner_data.json"
+    owner.save_to_file(file_path)
+
+    loaded_owner = Owner.load_from_file(file_path)
+    assert loaded_owner.name == owner.name
+    assert len(loaded_owner.pets) == 1
+    assert loaded_owner.pets[0].name == "Buddy"
+    assert len(loaded_owner.pets[0].tasks) == 1
+    assert loaded_owner.pets[0].tasks[0].name == "Walk"
+
+
 def test_mark_complete_creates_next_occurrence_for_recurring_tasks():
     """Test that completed daily and weekly tasks create a new pending task for the next occurrence."""
     daily_task = Task(id="daily-1", name="Feed", frequency=Frequency.DAILY, due_date=date.today())

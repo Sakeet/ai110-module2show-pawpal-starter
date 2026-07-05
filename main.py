@@ -3,10 +3,16 @@ PawPal+ Main Entry Point
 Demonstrates creating an owner with multiple pets and displaying today's schedule.
 """
 
+from pathlib import Path
+
 from pawpal_system import (
     Task, Pet, Owner, Scheduler,
     TaskCategory, Priority, Frequency
 )
+
+
+data_folder = Path("data")
+DATA_FILE = data_folder / "pawpal_owner.json"
 
 
 def format_minutes(minutes: int) -> str:
@@ -288,8 +294,8 @@ def main():
     # Buddy: 2 hours available (120 minutes)
     # Whiskers: 1.5 hours available (90 minutes)
     plans = [
-        scheduler.generate_plan(buddy, available_time=120),
-        scheduler.generate_plan(whiskers, available_time=90),
+        scheduler.generate_time_blocked_plan(buddy, available_time=120),
+        scheduler.generate_time_blocked_plan(whiskers, available_time=90),
     ]
     
     # ============================================================================
@@ -302,6 +308,15 @@ def main():
     for plan in plans:
         print_plan_section(plan)
     
+    # Save the owner data for persistence demonstration
+    data_folder.mkdir(exist_ok=True)
+    owner.save_to_file(DATA_FILE)
+    print(f"\nSaved owner and task data to: {DATA_FILE}")
+
+    # Load the file back to verify persistence
+    loaded_owner = Owner.load_from_file(DATA_FILE)
+    print(f"Loaded owner from persistence: {loaded_owner.name} with {len(loaded_owner.pets)} pets.")
+
     # ============================================================================
     # STEP 5: Display Short Scheduling Rationale
     # ============================================================================
