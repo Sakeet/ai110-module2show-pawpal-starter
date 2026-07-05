@@ -243,6 +243,101 @@ def test_scheduler_sort_by_time():
     assert [task.id for task in sorted_tasks] == ["early", "mid", "late"]
 
 
+def test_scheduler_conflict_detection_flags_duplicate_times():
+    """Scheduler should flag tasks with duplicate/overlapping times as conflicts."""
+    scheduler = Scheduler()
+    task1 = Task(id="t1", name="Vet", preferred_time_window=(600, 660))
+    task2 = Task(id="t2", name="Vaccination", preferred_time_window=(600, 660))
+
+    warnings = scheduler.detect_conflicts([task1, task2])
+
+    assert len(warnings) == 1
+    assert "Vet" in warnings[0]
+    assert "Vaccination" in warnings[0]
+
+
+def test_sort_by_time_handles_missing_windows():
+    """Tasks without preferred windows should sort after tasks with windows."""
+    scheduler = Scheduler()
+    tasks = [
+        Task(id="no-window", name="No window"),
+        Task(id="early", name="Early", preferred_time_window=(480, 540)),
+        Task(id="also-no-window", name="Also no window"),
+    ]
+
+    sorted_tasks = scheduler.sort_by_time(tasks)
+
+    assert [task.id for task in sorted_tasks] == ["early", "also-no-window", "no-window"]
+
+
+def test_scheduler_exact_capacity_and_overflow():
+    """Scheduler should exactly fill available time and drop overflow tasks."""
+    pet = Pet(name="Milo", species="cat")
+    pet.add_task(Task(id="t1", name="Feed", duration=30, priority=Priority.MUST_DO))
+    pet.add_task(Task(id="t2", name="Play", duration=30, priority=Priority.HIGH))
+    pet.add_task(Task(id="t3", name="Brush", duration=30, priority=Priority.MEDIUM))
+
+    scheduler = Scheduler()
+    plan = scheduler.generate_plan(pet, available_time=60)
+
+    assert plan.total_time_used == 60
+    assert plan.time_remaining == 0
+    assert len(plan.scheduled_tasks) == 2
+    assert len(plan.dropped_tasks) == 1
+    assert plan.dropped_tasks[0]["task"].id == "t3"
+
+
+def test_scheduler_prefers_time_sensitive_tasks():
+    """Time-sensitive tasks should be chosen before non-time-sensitive ones when time is limited."""
+    pet = Pet(name="Luna", species="dog")
+    pet.add_task(Task(id="a", name="A", duration=30, priority=Priority.MEDIUM, is_time_sensitive=False))
+    pet.add_task(Task(id="b", name="B", duration=30, priority=Priority.MEDIUM, is_time_sensitive=True))
+    pet.add_task(Task(id="c", name="C", duration=30, priority=Priority.LOW, is_time_sensitive=True))
+
+    scheduler = Scheduler()
+    plan = scheduler.generate_plan(pet, available_time=60)
+
+    assert {task.id for task in plan.scheduled_tasks} == {"b", "a"}
+    assert plan.scheduled_tasks[0].id == "b"
+    assert plan.dropped_tasks[0]["task"].id == "c"
+
+
+def test_detect_conflicts_treats_adjacent_windows_as_non_overlapping():
+    """Tasks that touch end-to-start should not be reported as conflicting."""
+    scheduler = Scheduler()
+    tasks = [
+        Task(id="t1", name="First", preferred_time_window=(480, 540)),
+        Task(id="t2", name="Second", preferred_time_window=(540, 600)),
+    ]
+
+    warnings = scheduler.detect_conflicts(tasks)
+
+    assert warnings == []
+
+
+def test_generate_combined_plan_drops_tasks_per_pet():
+    """Combined owner plan should assign dropped tasks back to the correct pet."""
+    owner = Owner(name="Sam")
+    dog = Pet(name="Dog", species="dog")
+    cat = Pet(name="Cat", species="cat")
+
+    dog.add_task(Task(id="d1", name="Walk", duration=30, priority=Priority.MUST_DO))
+    dog.add_task(Task(id="d2", name="Play", duration=30, priority=Priority.HIGH))
+    cat.add_task(Task(id="c1", name="Feed", duration=30, priority=Priority.MUST_DO))
+    cat.add_task(Task(id="c2", name="Nap", duration=30, priority=Priority.LOW))
+
+    owner.add_pet(dog)
+    owner.add_pet(cat)
+
+    scheduler = Scheduler()
+    combined = scheduler.generate_combined_plan(owner, total_available_time=90)
+
+    assert combined["total_time_used"] == 90
+    assert combined["time_remaining"] == 0
+    assert any(plan.pet.name == "Dog" and len(plan.dropped_tasks) == 0 for plan in combined["pet_plans"])
+    assert any(plan.pet.name == "Cat" and len(plan.dropped_tasks) == 1 for plan in combined["pet_plans"])
+
+
 def test_mark_complete_creates_next_occurrence_for_recurring_tasks():
     """Test that completed daily and weekly tasks create a new pending task for the next occurrence."""
     daily_task = Task(id="daily-1", name="Feed", frequency=Frequency.DAILY, due_date=date.today())

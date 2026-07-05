@@ -97,13 +97,18 @@ Scheduled tasks:
 
 ## 🧪 Testing PawPal+
 
-```bash
-# Run the full test suite:
-pytest
+Run the full suite with:
 
-# Run with coverage:
-pytest --cov
+```bash
+python -m pytest
 ```
+
+The tests verify core scheduler behavior, including:
+
+- task sorting order by preferred time window
+- recurring task creation for daily and weekly tasks
+- conflict detection for overlapping task time windows
+- plan generation and task filtering logic
 
 Sample test output:
 
