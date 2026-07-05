@@ -110,31 +110,105 @@ The tests verify core scheduler behavior, including:
 - conflict detection for overlapping task time windows
 - plan generation and task filtering logic
 
+
 Sample test output:
 
 ```
-# Paste your pytest output here
+![alt text](image-1.png)
 ```
 
-## 📐 Smarter Scheduling
+## Features
 
-The scheduler now includes a few lightweight but practical improvements for pet care planning:
+- Sorting by time windows (`Scheduler.sort_by_time()`): orders pending tasks by preferred start time so the schedule feels natural and time-aware.
+- Priority-aware task selection (`Scheduler.generate_plan()`): chooses the highest-priority and most time-sensitive tasks that fit within the pet's available minutes.
+- Conflict warnings (`Scheduler.detect_conflicts()`): detects overlapping preferred time windows and surfaces readable warnings in the UI.
+- Daily recurrence handling (`Task.mark_complete()`): creates the next occurrence for `daily` and `weekly` tasks so recurring care stays on the schedule.
+- Task filtering (`Scheduler.filter_tasks()`): shows only pending tasks for the selected pet and hides completed items from the active todo view.
+- Plan explanation (`DailyPlan.summary()` and `DailyPlan.explain()`): generates human-readable plan summaries and reasons for why tasks were included or dropped.
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Sorting behavior | `Scheduler.sort_by_time()` | Orders tasks by their preferred start time so the daily plan feels more natural and time-aware. |
-| Filtering behavior | `Scheduler.filter_tasks()` | Filters tasks by completion status and/or pet name, which helps owners focus on pending tasks for a specific pet. |
-| Conflict detection | `Scheduler.detect_conflicts()` | Checks for overlapping time windows and returns a warning message instead of crashing the app. |
-| Recurring task logic | `Task.mark_complete()` | When a daily or weekly task is completed, a new pending task is created for the next occurrence using `timedelta`. |
+## Demo Walkthrough
 
-## 📸 Demo Walkthrough
+### Main UI features
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+- Add owner and pet details at the top of the page.
+- Create pet care tasks with a title, duration, and priority.
+- See the current pet's pending tasks in a table sorted by preferred time window.
+- Generate a daily schedule with a single click.
+- Review conflict warnings and the generated plan explanation directly in the app.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### Example workflow
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+1. Enter an owner name and add a new pet using the **Add a Pet** section.
+2. Add tasks for that pet in the **Add a Task** section, including duration and priority.
+3. Observe the pending task table, which shows tasks sorted by time window and filtered to the current pet.
+4. Click **Generate schedule** to build that pet's daily plan.
+5. If there are overlapping tasks, the app shows conflict warnings; otherwise it displays the scheduled plan and reasoning.
+
+### Key scheduler behaviors shown
+
+- Sorting tasks by preferred start time so morning and evening care appear in a natural order.
+- Filtering tasks to only show pending work for the active pet.
+- Warning the user when two tasks overlap in the same time window.
+- Greedily fitting the highest-priority tasks into each pet's time budget.
+- Explaining why tasks were included or dropped in the final plan.
+
+### Sample CLI output
+
+Run the CLI entry point with:
+
+```bash
+python main.py
+```
+
+Example output:
+
+```text
+======================================================================
+                   🐾 PAWPAL+ - PET CARE SCHEDULER 🐾                   
+======================================================================
+
+👤 Owner: Sarah Mitchell
+   Timezone: EST
+   Availability: weekday evenings and weekends
+
+----------------------------------------------------------------------
+🐕 PET 1: Creating Buddy the Dog...
+   ✓ Added 5 tasks to Buddy
+
+----------------------------------------------------------------------
+🐱 PET 2: Creating Whiskers the Cat...
+   ✓ Added 5 tasks to Whiskers
+
+----------------------------------------------------------------------
+📅 Generating Today's Schedules...
+
+======================================================================
+                          📋 TODAY'S SCHEDULE                           
+======================================================================
+
+======================== BUDDY ========================
+Species: dog
+Time budget: 120 min
+Scheduled: 5 task(s) | Used: 110 min | Remaining: 10 min
+
+Scheduled tasks:
+  • Breakfast            | 15 min | MUST_DO | [08:00-08:15]
+  • Morning Walk         | 30 min | HIGH    | [08:00-08:30]
+  • Dinner               | 15 min | MUST_DO | [17:00-17:15]
+  • Afternoon Walk       | 30 min | HIGH    | [17:00-17:30]
+  • Training Session     | 20 min | MEDIUM  | [18:00-18:20]
+
+====================== WHISKERS ======================
+Species: cat
+Time budget: 90 min
+Scheduled: 5 task(s) | Used: 50 min | Remaining: 40 min
+
+Scheduled tasks:
+  • Breakfast            | 10 min | MUST_DO | [08:00-08:10]
+  • Medication           |  5 min | MUST_DO | [10:00-10:05]
+  • Dinner               | 10 min | MUST_DO | [17:00-17:10]
+  • Lunch                | 10 min | MEDIUM  | [13:00-13:10]
+  • Play & Enrichment    | 15 min | MEDIUM  | [15:00-15:15]
+```
+
+**Optional screenshot or video**: add one if you want to show the Streamlit app visually.

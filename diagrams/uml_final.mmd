@@ -1,0 +1,114 @@
+classDiagram
+    class TaskCategory {
+        <<enumeration>>
+        WALK
+        FEEDING
+        MEDS
+        ENRICHMENT
+        GROOMING
+        OTHER
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+        MUST_DO
+    }
+
+    class Frequency {
+        <<enumeration>>
+        DAILY
+        WEEKLY
+        ONE_OFF
+    }
+
+    class Task {
+        +id: str
+        +name: str
+        +category: TaskCategory
+        +duration: int
+        +priority: Priority
+        +preferred_time_window: tuple|None
+        +frequency: Frequency
+        +is_time_sensitive: bool
+        +status: str
+        +pet_name: str|None
+        +due_date: date|None
+        +conflicts_with(other_task)
+        +mark_complete()
+        +to_dict()
+        +from_dict(data)
+    }
+
+    class Pet {
+        +name: str
+        +species: str
+        +breed: str|None
+        +age: int
+        +notes: str
+        +tasks: list[Task]
+        +add_task(task)
+        +edit_task(task_id, **updates)
+        +remove_task(task_id)
+        +get_tasks()
+        +get_tasks_by_category(category)
+        +to_dict()
+        +from_dict(data)
+    }
+
+    class Owner {
+        +name: str
+        +pets: list[Pet]
+        +preferences: dict
+        +add_pet(pet)
+        +remove_pet(pet)
+        +get_pet(pet_name)
+        +get_all_tasks()
+        +get_all_tasks_by_category(category)
+        +to_dict()
+        +from_dict(data)
+    }
+
+    class Scheduler {
+        +available_time: int
+        +tasks: list[Task]
+        +strategy: str
+        +sort_by_time(tasks)
+        +filter_tasks(tasks, status, pet_name)
+        +detect_conflicts(tasks)
+        +get_all_tasks_for_owner(owner)
+        +generate_plan(pet, available_time)
+        +generate_plans_for_owner(owner, available_time_per_pet)
+        +generate_combined_plan(owner, total_available_time)
+        +_select_tasks(tasks, available_time)
+        +_order_tasks(selected_tasks)
+        +explain_decision(task, included)
+    }
+
+    class DailyPlan {
+        +pet: Pet
+        +date: date
+        +scheduled_tasks: list[Task]
+        +dropped_tasks: list[dict]
+        +total_time_used: int
+        +time_remaining: int
+        +summary()
+        +explain()
+        +to_dict()
+        +from_dict(data)
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : contains
+    DailyPlan --> Pet : plans for
+    DailyPlan --> Task : includes
+    Scheduler --> Owner : evaluates
+    Scheduler --> Pet : evaluates
+    Scheduler --> Task : orders/filters
+    Scheduler --> DailyPlan : creates
+
+    Task --> TaskCategory : uses
+    Task --> Priority : uses
+    Task --> Frequency : uses

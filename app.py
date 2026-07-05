@@ -106,10 +106,27 @@ if owner.pets:
     current_pet = owner.pets[-1]
     st.write(f"### Current tasks for {current_pet.name}")
     if current_pet.get_tasks():
+        scheduler = Scheduler(strategy="priority-first")
+        pending_tasks = scheduler.filter_tasks(current_pet.get_tasks(), status="pending")
+        sorted_tasks = scheduler.sort_by_time(pending_tasks)
+
+        def format_window(task):
+            if task.preferred_time_window:
+                start, end = task.preferred_time_window
+                return f"{start}-{end}"
+            return "Flexible"
+
         task_rows = [
-            {"Task": task.name, "Duration": task.duration, "Priority": task.priority.value}
-            for task in current_pet.get_tasks()
+            {
+                "Task": task.name,
+                "Duration": task.duration,
+                "Priority": task.priority.value,
+                "Window": format_window(task),
+                "Status": task.status,
+            }
+            for task in sorted_tasks
         ]
+        st.caption("Tasks are sorted by preferred time window and filtered to pending items.")
         st.table(task_rows)
     else:
         st.info("No tasks yet. Add one above.")
@@ -124,7 +141,20 @@ if st.button("Generate schedule"):
         st.warning("Add a pet and at least one task before generating a schedule.")
     else:
         scheduler = Scheduler(strategy="priority-first")
+        all_tasks = owner.get_all_tasks()
+        conflict_warnings = scheduler.detect_conflicts(all_tasks)
+
+        if conflict_warnings:
+            st.warning("Potential scheduling conflicts detected:")
+            for warning in conflict_warnings:
+                st.write(f"- {warning}")
+            st.caption("A helpful next step is to move one of the overlapping tasks to a different time window.")
+        else:
+            st.success("No overlapping task windows were found.")
+
         plans = scheduler.generate_plans_for_owner(owner, available_time_per_pet=120)
+        st.success("Schedule generated successfully.")
         for plan in plans:
+            st.subheader(f"{plan.pet.name}'s plan")
             st.write(plan.summary())
             st.code(plan.explain())
